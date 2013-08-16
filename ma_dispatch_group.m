@@ -1,6 +1,7 @@
 #import "ma_dispatch_group.h"
 
 #import <Block.h>
+#import <pthread.h>
 #import <stdint.h>
 #import <stdlib.h>
 
@@ -49,9 +50,26 @@ void ma_dispatch_group_notify(ma_dispatch_group_t group, void (^block)(void))
 
 void ma_dispatch_group_wait(ma_dispatch_group_t group)
 {
-    __block volatile int done = 0;
-    ma_dispatch_group_notify(group, ^{ done = 1; });
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cond, NULL);
+    
+    pthread_mutex_t *mutexPtr = &mutex;
+    pthread_cond_t *condPtr = &cond;
+    
+    __block int done = 0;
+    ma_dispatch_group_notify(group, ^{
+        pthread_mutex_lock(mutexPtr);
+        done = 1;
+        pthread_cond_broadcast(condPtr);
+        pthread_mutex_unlock(mutexPtr);
+    });
+    
+    pthread_mutex_lock(mutexPtr);
     while(!done)
-        ; // do nothing
+        pthread_cond_wait(condPtr, mutexPtr);
+    pthread_mutex_unlock(mutexPtr);
 }
 
